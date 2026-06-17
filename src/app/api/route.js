@@ -8,7 +8,7 @@ export async function GET(request) {
     return NextResponse.json({ ok: false, error: 'Missing video id or url' }, { status: 400 });
   }
 
-  // 1. Linisin ang input ID upang makuha ang tamang short ID
+  // Linisin ang input ID para makuha lamang ang short ID code
   let cleanId = id;
   if (id.includes('/s/')) {
     cleanId = id.split('/s/')[1].split('?')[0].split('&')[0];
@@ -16,61 +16,86 @@ export async function GET(request) {
     cleanId = id.split('surl=')[1].split('&')[0];
   }
 
-  // Tanggalin ang "1" sa simula kung mayroon
-  if (cleanId.startsWith('1') && cleanId.length > 10) {
-    cleanId = cleanId.substring(1);
-  }
-
   const finalShareUrl = `https://1024terabox.com/s/${cleanId}`;
 
-  // 2. Gagamit tayo ng dalawang pinakamatatag na public API backends na may auto-rotating cookies
-  const apiSources = [
-    `https://terabox-proxy.vercel.app/api/download?url=${encodeURIComponent(finalShareUrl)}`,
-    `https://terabox-app.vercel.app/api?url=${encodeURIComponent(finalShareUrl)}`
+  // LISTAHAN NG MGA MATATAG NA PUBLIC BYPASS APIs (Walang Cookie Setup na Kailangan!)
+  const publicApis = [
+    // 1. Terabox Proxy Public Server
+    {
+      url: `https://terabox-proxy.vercel.app/api/download?url=${encodeURIComponent(finalShareUrl)}`,
+      parse: (data) => {
+        const file = data.files && data.files[0];
+        return file ? {
+          download_link: file.download_link || file.direct_link,
+          file_name: file.filename || file.file_name
+        } : null;
+      }
+    },
+    // 2. Terabox App Public Server
+    {
+      url: `https://terabox-app.vercel.app/api?url=${encodeURIComponent(finalShareUrl)}`,
+      parse: (data) => {
+        const file = data.files && data.files[0];
+        return file ? {
+          download_link: file.download_link || file.direct_link,
+          file_name: file.filename || file.file_name
+        } : null;
+      }
+    },
+    // 3. Alternate Direct Server
+    {
+      url: `https://terashare.vercel.app/api?url=${encodeURIComponent(finalShareUrl)}`,
+      parse: (data) => {
+        return data.download ? {
+          download_link: data.download,
+          file_name: data.filename || "TeraBox_Video.mp4"
+        } : null;
+      }
+    }
   ];
 
-  for (const apiUrl of apiSources) {
+  // SUBUKAN ANG BAWAT API SA MAAYOS NA PAGKASUNOD-SUNOD
+  for (const api of publicApis) {
     try {
-      const response = await fetch(apiUrl, {
+      const response = await fetch(api.url, {
         method: 'GET',
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
           'Accept': 'application/json'
         },
-        signal: AbortSignal.timeout(8000) // 8-second limit
+        signal: AbortSignal.timeout(6000) // 6-seconds timeout bawat API para mabilis lumipat sa susunod kung mabagal
       });
 
       if (response.ok) {
         const data = await response.json();
-        const fileList = data.files || data.list;
-        const file = fileList && fileList[0];
-        
-        const rawDirectLink = file ? (file.download_link || file.direct_link || file.dlink) : null;
-        const fileName = file ? (file.filename || file.file_name) : "TeraBox_Video.mp4";
+        const result = api.parse(data);
 
-        if (rawDirectLink) {
-          // --- ULTRA-POWERFUL CLOUDFLARE BYPASS PROXY WRAPPER ---
-          // Babalutin natin ang link sa Cloudflare stream proxy upang malutas ang 403 blocks.
-          // Malulutas nito ang error sa DownloadManager at ang pagka-stuck ng player!
-          const proxiedDownloadLink = `https://teradl.shraj.workers.dev/?url=${encodeURIComponent(rawDirectLink)}`;
-
+        if (result && result.download_link) {
           return NextResponse.json({
             ok: true,
-            download_link: proxiedDownloadLink,
-            file_name: fileName
+            download_link: result.download_link,
+            file_name: result.file_name
           });
         }
       }
     } catch (e) {
-      console.log(`Failed to fetch from: ${apiUrl}`);
+      console.log(`Failed to fetch from ${api.url}: ${e.message}`);
     }
   }
 
-  // FAILSAFE FALLBACK: Gagamit ng TeraBridge web player direct page kung sumablay ang direct API parsing
-  const failsafePlayerUrl = `https://terabridge.vercel.app/api/download?surl=${cleanId}`;
-  return NextResponse.json({
-    ok: true,
-    download_link: failsafePlayerUrl,
-    file_name: "TeraBox_Video_Stream.mp4"
-  });
+  // FALLBACK: KUNG BUSY ANG LAHAT NG SERVERS, GAGAMITIN NATIN ANG TERABRIDGE PROXY (SAFE AT WALANG COOKIES)
+  try {
+    const terabridgeUrl = `https://terabridge.vercel.app/api/download?surl=${cleanId}`;
+    return NextResponse.json({
+      ok: true,
+      // Binalot natin ang TeraBridge sa Cloudflare Proxy upang hindi mag-stuck ang player at hindi mag-error ang download
+      download_link: `https://teradl.shraj.workers.dev/?url=${encodeURIComponent(terabridgeUrl)}`,
+      file_name: "TeraBox_Video_Stream.mp4"
+    });
+  } catch (error) {
+    return NextResponse.json({ 
+      ok: false, 
+      message: 'All public bypass APIs are currently busy. Please try again in a few seconds.' 
+    });
+  }
 }
