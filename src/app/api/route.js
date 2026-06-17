@@ -17,13 +17,13 @@ export async function GET(request) {
 
   const finalShareUrl = `https://www.terabox.com/s/${cleanId}`;
 
-  // Awtomatikong kukunin ang kasalukuyan mong Vercel domain URL
+  // Awtomatikong kukunin ang kasalukuyan mong Vercel domain URL para sa video proxy
   const host = request.headers.get('host');
   const protocol = request.headers.get('x-forwarded-proto') || 'https';
-  const PROXY_BASE = `${protocol}/api/proxy?url=`;
+  const PROXY_BASE = `${protocol}://${host}/api/proxy?url=`;
 
   // ------------------------------------------------------------
-  // SOURCE A: TWO-STEP PUBLIC WORKER RESOLVER
+  // SOURCE A: TWO-STEP PUBLIC WORKER RESOLVER (NO COOKIE NEEDED)
   // ------------------------------------------------------------
   try {
     const infoRes = await fetch(`https://terabox.hnn.workers.dev/api/get-info?shorturl=${cleanId}&pwd=`, {
@@ -72,7 +72,7 @@ export async function GET(request) {
   }
 
   // ------------------------------------------------------------
-  // SOURCE B: ALTERNATE APIS
+  // SOURCE B: ALTERNATE APIS (NO COOKIE NEEDED)
   // ------------------------------------------------------------
   const apiSources = [
     `https://terabox-proxy.vercel.app/api/download?url=${encodeURIComponent(finalShareUrl)}`,
@@ -112,7 +112,7 @@ export async function GET(request) {
   }
 
   // ------------------------------------------------------------
-  // SOURCE C: TERABRIDGE FALLBACK (PROXIED & FIXED TO FETCH FIRST)
+  // SOURCE C: TERABRIDGE FALLBACK (PROXIED & NO COOKIE NEEDED)
   // ------------------------------------------------------------
   try {
     const terabridgeApiUrl = `https://terabridge.vercel.app/api/download?surl=${cleanId}`;
