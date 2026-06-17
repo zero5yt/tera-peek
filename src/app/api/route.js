@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server';
 
 export async function GET(request) {
@@ -17,12 +16,6 @@ export async function GET(request) {
     cleanId = id.split('surl=')[1].split('&')[0];
   }
 
-  // Tanggalin ang "1" sa simula kung mayroon
-  if (cleanId.startsWith('1') && cleanId.length > 10) {
-    cleanId = cleanId.substring(1);
-  }
-
-  // SMART DOMAIN REWRITING: Palaging gamitin ang www.terabox.com dahil ito ang tinatanggap ng karamihan ng public APIs!
   const finalShareUrl = `https://www.terabox.com/s/${cleanId}`;
 
   // ------------------------------------------------------------
@@ -118,12 +111,19 @@ export async function GET(request) {
   }
 
   // ------------------------------------------------------------
-  // SOURCE C: TERABRIDGE FALLBACK (SA PLAYER LANG PO ITO GAGANA)
+  // SOURCE C: TERABRIDGE FALLBACK (PROXIED SA CLOUDFLARE)
   // ------------------------------------------------------------
-  const failsafePlayerUrl = `https://terabridge.vercel.app/api/download?surl=${cleanId}`;
-  return NextResponse.json({
-    ok: true,
-    download_link: failsafePlayerUrl,
-    file_name: "TeraBox_Video_Stream.mp4"
-  });
+  try {
+    const terabridgeUrl = `https://terabridge.vercel.app/api/download?surl=${cleanId}`;
+    return NextResponse.json({
+      ok: true,
+      download_link: `https://teradl.shraj.workers.dev/?url=${encodeURIComponent(terabridgeUrl)}`,
+      file_name: "TeraBox_Video_Stream.mp4"
+    });
+  } catch (error) {
+    return NextResponse.json({ 
+      ok: false, 
+      message: 'All public bypass APIs are currently busy. Please try again in a few seconds.' 
+    });
+  }
 }
