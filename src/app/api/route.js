@@ -17,11 +17,6 @@ export async function GET(request) {
 
   const finalShareUrl = `https://www.terabox.com/s/${cleanId}`;
 
-  // Awtomatikong gagamitin ang sarili mong Vercel Domain para sa video proxy streaming
-  const host = request.headers.get('host');
-  const protocol = request.headers.get('x-forwarded-proto') || 'https';
-  const PROXY_BASE = `${protocol}://${host}/api/proxy?url=`;
-
   // ------------------------------------------------------------
   // SOURCE A: TWO-STEP PUBLIC WORKER RESOLVER (FALLBACK)
   // ------------------------------------------------------------
@@ -58,9 +53,10 @@ export async function GET(request) {
           const rawDirect = dlData.downloadLink || dlData.download_link || dlData.direct_link || dlData.download;
 
           if (rawDirect) {
+            // Direktang ibalik ang link nang walang proxy para maiwasan ang 30-sec Vercel timeout limit!
             return NextResponse.json({
               ok: true,
-              download_link: `${PROXY_BASE}${encodeURIComponent(rawDirect)}`,
+              download_link: rawDirect,
               file_name: infoData.list[0].filename || "TeraBox_Video.mp4"
             });
           }
@@ -99,9 +95,10 @@ export async function GET(request) {
         const fileName = file ? (file.filename || file.file_name) : "TeraBox_Video.mp4";
 
         if (rawDirectLink) {
+          // Direktang ibalik ang link nang walang proxy para maiwasan ang 30-sec Vercel timeout limit!
           return NextResponse.json({
             ok: true,
-            download_link: `${PROXY_BASE}${encodeURIComponent(rawDirectLink)}`,
+            download_link: rawDirectLink,
             file_name: fileName
           });
         }
@@ -112,15 +109,16 @@ export async function GET(request) {
   }
 
   // ------------------------------------------------------------
-  // SOURCE C: TERABRIDGE FALLBACK (PROXIED - INSTANT RETURN)
-  // Dahil ito ay nagre-redirect sa video file, ibabalik natin ito agad
-  // papunta sa iyong sariling Vercel Proxy nang walang server delays!
+  // SOURCE C: TERABRIDGE FALLBACK (DIRECT UNPROXIED LINK)
+  // Dahil ito ay nagre-redirect sa video file, ibabalik natin ito nang direkta.
+  // Ang Android player o DownloadManager ay kusang susunod sa redirect (302)
+  // papunta sa pinakamabilis na TeraBox CDN nang walang 30-sec limit!
   // ------------------------------------------------------------
   try {
     const terabridgeUrl = `https://terabridge.vercel.app/api/download?surl=${cleanId}`;
     return NextResponse.json({
       ok: true,
-      download_link: `${PROXY_BASE}${encodeURIComponent(terabridgeUrl)}`,
+      download_link: terabridgeUrl, // Direct return, no proxy wrapper!
       file_name: "TeraBox_Video_Stream.mp4"
     });
   } catch (error) {
