@@ -8,7 +8,6 @@ export async function GET(request) {
     return NextResponse.json({ ok: false, error: 'Missing video id or url' }, { status: 400 });
   }
 
-  // 1. Linisin ang input ID upang makuha ang tamang short ID
   let cleanId = id;
   if (id.includes('/s/')) {
     cleanId = id.split('/s/')[1].split('?')[0].split('&')[0];
@@ -18,11 +17,13 @@ export async function GET(request) {
 
   const finalShareUrl = `https://www.terabox.com/s/${cleanId}`;
 
-  // PROXY CONFIGURATION (I-update ito kapag may sarili ka nang Worker)
-  const PROXY_BASE = "https://teradl.shraj.workers.dev/?url=";
+  // Awtomatikong kukunin ang kasalukuyan mong Vercel domain URL
+  const host = request.headers.get('host');
+  const protocol = request.headers.get('x-forwarded-proto') || 'https';
+  const PROXY_BASE = `${protocol}/api/proxy?url=`;
 
   // ------------------------------------------------------------
-  // SOURCE A: TWO-STEP PUBLIC WORKER RESOLVER (MATATAG AT MABILIS)
+  // SOURCE A: TWO-STEP PUBLIC WORKER RESOLVER
   // ------------------------------------------------------------
   try {
     const infoRes = await fetch(`https://terabox.hnn.workers.dev/api/get-info?shorturl=${cleanId}&pwd=`, {
