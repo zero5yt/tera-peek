@@ -18,6 +18,9 @@ export async function GET(request) {
 
   const finalShareUrl = `https://www.terabox.com/s/${cleanId}`;
 
+  // PROXY CONFIGURATION (I-update ito kapag may sarili ka nang Worker)
+  const PROXY_BASE = "https://teradl.shraj.workers.dev/?url=";
+
   // ------------------------------------------------------------
   // SOURCE A: TWO-STEP PUBLIC WORKER RESOLVER (MATATAG AT MABILIS)
   // ------------------------------------------------------------
@@ -54,11 +57,9 @@ export async function GET(request) {
           const rawDirect = dlData.downloadLink || dlData.download_link || dlData.direct_link || dlData.download;
 
           if (rawDirect) {
-            // Babalutin natin ang nakuha nating direct link sa Cloudflare proxy wrapper
-            const proxiedLink = `https://teradl.shraj.workers.dev/?url=${encodeURIComponent(rawDirect)}`;
             return NextResponse.json({
               ok: true,
-              download_link: proxiedLink,
+              download_link: `${PROXY_BASE}${encodeURIComponent(rawDirect)}`,
               file_name: infoData.list[0].filename || "TeraBox_Video.mp4"
             });
           }
@@ -70,7 +71,7 @@ export async function GET(request) {
   }
 
   // ------------------------------------------------------------
-  // SOURCE B: ALTERNATE APIS WITH REWRITTEN WWW.TERABOX.COM SHARE URL
+  // SOURCE B: ALTERNATE APIS
   // ------------------------------------------------------------
   const apiSources = [
     `https://terabox-proxy.vercel.app/api/download?url=${encodeURIComponent(finalShareUrl)}`,
@@ -97,10 +98,9 @@ export async function GET(request) {
         const fileName = file ? (file.filename || file.file_name) : "TeraBox_Video.mp4";
 
         if (rawDirectLink) {
-          const proxiedDownloadLink = `https://teradl.shraj.workers.dev/?url=${encodeURIComponent(rawDirectLink)}`;
           return NextResponse.json({
             ok: true,
-            download_link: proxiedDownloadLink,
+            download_link: `${PROXY_BASE}${encodeURIComponent(rawDirectLink)}`,
             file_name: fileName
           });
         }
@@ -111,19 +111,30 @@ export async function GET(request) {
   }
 
   // ------------------------------------------------------------
-  // SOURCE C: TERABRIDGE FALLBACK (PROXIED SA CLOUDFLARE)
+  // SOURCE C: TERABRIDGE FALLBACK (PROXIED & FIXED TO FETCH FIRST)
   // ------------------------------------------------------------
   try {
-    const terabridgeUrl = `https://terabridge.vercel.app/api/download?surl=${cleanId}`;
-    return NextResponse.json({
-      ok: true,
-      download_link: `https://teradl.shraj.workers.dev/?url=${encodeURIComponent(terabridgeUrl)}`,
-      file_name: "TeraBox_Video_Stream.mp4"
-    });
+    const terabridgeApiUrl = `https://terabridge.vercel.app/api/download?surl=${cleanId}`;
+    const tbRes = await fetch(terabridgeApiUrl, { signal: AbortSignal.timeout(6000) });
+
+    if (tbRes.ok) {
+      const tbData = await tbRes.json();
+      const rawDirectLink = tbData.download_link || tbData.downloadLink || tbData.direct_link;
+
+      if (rawDirectLink) {
+        return NextResponse.json({
+          ok: true,
+          download_link: `${PROXY_BASE}${encodeURIComponent(rawDirectLink)}`,
+          file_name: tbData.file_name || "TeraBox_Video_Stream.mp4"
+        });
+      }
+    }
   } catch (error) {
-    return NextResponse.json({ 
-      ok: false, 
-      message: 'All public bypass APIs are currently busy. Please try again in a few seconds.' 
-    });
+    console.log("Source C failed: " + error.message);
   }
+
+  return NextResponse.json({
+    ok: false,
+    message: 'All public bypass APIs are currently busy. Please try again in a few seconds.'
+  });
 }
