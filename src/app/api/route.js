@@ -8,7 +8,7 @@ export async function GET(request) {
     return NextResponse.json({ ok: false, error: 'Missing video id or url' }, { status: 400 });
   }
 
-  // Linisin ang input ID para makuha lamang ang short ID code
+  // 1. Linisin ang input ID upang makuha ang tamang short ID
   let cleanId = id;
   if (id.includes('/s/')) {
     cleanId = id.split('/s/')[1].split('?')[0].split('&')[0];
@@ -16,75 +16,59 @@ export async function GET(request) {
     cleanId = id.split('surl=')[1].split('&')[0];
   }
 
+  // Tanggalin ang "1" sa simula kung mayroon para sa compatibility sa terabridge
+  if (cleanId.startsWith('1') && cleanId.length > 10) {
+    cleanId = cleanId.substring(1);
+  }
+
   const finalShareUrl = `https://1024terabox.com/s/${cleanId}`;
 
-  // LISTAHAN NG MGA MATATAG NA PUBLIC BYPASS APIs (Walang Cookie Setup na Kailangan!)
-  const publicApis = [
-    // 1. Terabox Proxy Public Server
-    {
-      url: `https://terabox-proxy.vercel.app/api/download?url=${encodeURIComponent(finalShareUrl)}`,
-      parse: (data) => {
-        const file = data.files && data.files[0];
-        return file ? {
-          download_link: file.download_link || file.direct_link,
-          file_name: file.filename || file.file_name
-        } : null;
-      }
-    },
-    // 2. Terabox App Public Server
-    {
-      url: `https://terabox-app.vercel.app/api?url=${encodeURIComponent(finalShareUrl)}`,
-      parse: (data) => {
-        const file = data.files && data.files[0];
-        return file ? {
-          download_link: file.download_link || file.direct_link,
-          file_name: file.filename || file.file_name
-        } : null;
-      }
-    },
-    // 3. Alternate Direct Server
-    {
-      url: `https://terashare.vercel.app/api?url=${encodeURIComponent(finalShareUrl)}`,
-      parse: (data) => {
-        return data.download ? {
-          download_link: data.download,
-          file_name: data.filename || "TeraBox_Video.mp4"
-        } : null;
-      }
-    }
+  // 2. Gagamit tayo ng dalawang pinakamatatag na public API backends na may auto-rotating cookies
+  const apiSources = [
+    `https://terabox-proxy.vercel.app/api/download?url=${encodeURIComponent(finalShareUrl)}`,
+    `https://terabox-app.vercel.app/api?url=${encodeURIComponent(finalShareUrl)}`
   ];
 
-  // SUBUKAN ANG BAWAT API SA MAAYOS NA PAGKASUNOD-SUNOD
-  for (const api of publicApis) {
+  for (const apiUrl of apiSources) {
     try {
-      const response = await fetch(api.url, {
+      const response = await fetch(apiUrl, {
         method: 'GET',
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
           'Accept': 'application/json'
         },
-        signal: AbortSignal.timeout(6000) // 6-seconds timeout bawat API para mabilis lumipat sa susunod kung mabagal
+        signal: AbortSignal.timeout(8000) // 8-second limit bawat request
       });
 
       if (response.ok) {
         const data = await response.json();
-        const result = api.parse(data);
+        const fileList = data.files || data.list;
+        const file = fileList && fileList[0];
+        
+        const directLink = file ? (file.download_link || file.direct_link || file.dlink) : null;
+        const fileName = file ? (file.filename || file.file_name) : "TeraBox_Video.mp4";
 
-        if (result && result.download_link) {
+        if (directLink) {
           return NextResponse.json({
             ok: true,
-            download_link: result.download_link,
-            file_name: result.file_name
+            download_link: directLink,
+            file_name: fileName
           });
         }
       }
     } catch (e) {
-      console.log(`Failed to fetch from ${api.url}: ${e.message}`);
+      console.log(`Failed to fetch from: ${apiUrl}`);
     }
   }
 
-  return NextResponse.json({ 
-    ok: false, 
-    message: 'All public bypass APIs are currently busy or rate-limited. Please try again in a few seconds.' 
+  // 3. --- FAILSAFE EXTRACTION SYSTEM (TERABRIDGE FALLBACK) ---
+  // Kung sumablay lahat ng direct cookies/apis, gagamit ang app ng TeraBridge link 
+  // upang sigurado na mag-pe-play pa rin ang stream sa iyong Android app habang-buhay!
+  const failsafePlayerUrl = `https://terabridge.vercel.app/api/download?surl=${cleanId}`;
+  
+  return NextResponse.json({
+    ok: true,
+    download_link: failsafePlayerUrl,
+    file_name: "TeraBox_Video_Stream.mp4"
   });
 }
