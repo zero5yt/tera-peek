@@ -16,8 +16,8 @@ export async function GET(request) {
       finalShareUrl = `https://1024terabox.com/s/${id}`;
     }
 
-    // Siguraduhing naka-encode ang url para iwas error sa query parameter
-    const targetUrl = `https://tera-core.vercel.app/api2?url=${encodeURIComponent(finalShareUrl)}`;
+    // GAMIT ANG SARILI MONG VERCEL GATEWAY AT TAMA NA ANG BACKTICKS ( ` )
+    const targetUrl = `https://terabox-gateway-theta.vercel.app/api2?url=${encodeURIComponent(finalShareUrl)}`;
 
     const response = await fetch(targetUrl, {
       method: 'GET',
