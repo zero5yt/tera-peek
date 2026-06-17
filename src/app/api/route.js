@@ -16,8 +16,8 @@ export async function GET(request) {
       finalShareUrl = `https://1024terabox.com/s/${id}`;
     }
 
-    // GAMIT ANG BAGO MONG DEPLOYED GATEWAY DOMAIN
-    const targetUrl = `https://terabox-gateway-theta.vercel.app/api2?url=${encodeURIComponent(finalShareUrl)}`;
+    // NAKATURO NA SA BAGO MONG 'terabox-gateway1' DOMAIN
+    const targetUrl = `https://terabox-gateway1.vercel.app/api2?url=${encodeURIComponent(finalShareUrl)}`;
 
     const response = await fetch(targetUrl, {
       method: 'GET',
