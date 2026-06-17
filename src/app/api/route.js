@@ -17,19 +17,19 @@ export async function GET(request) {
 
   const finalShareUrl = `https://www.terabox.com/s/${cleanId}`;
 
-  // Awtomatikong kukunin ang kasalukuyan mong Vercel domain URL para sa video proxy
+  // Awtomatikong gagamitin ang sarili mong Vercel Domain para sa video proxy streaming
   const host = request.headers.get('host');
   const protocol = request.headers.get('x-forwarded-proto') || 'https';
   const PROXY_BASE = `${protocol}://${host}/api/proxy?url=`;
 
   // ------------------------------------------------------------
-  // SOURCE A: TWO-STEP PUBLIC WORKER RESOLVER (NO COOKIE NEEDED)
+  // SOURCE A: TWO-STEP PUBLIC WORKER RESOLVER (FALLBACK)
   // ------------------------------------------------------------
   try {
     const infoRes = await fetch(`https://terabox.hnn.workers.dev/api/get-info?shorturl=${cleanId}&pwd=`, {
       method: 'GET',
       headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(5000)
+      signal: AbortSignal.timeout(3000) // Maikling timeout para mabilis lumaktaw kapag mabagal
     });
 
     if (infoRes.ok) {
@@ -50,7 +50,7 @@ export async function GET(request) {
             timestamp: infoData.timestamp,
             fs_id: fsId
           }),
-          signal: AbortSignal.timeout(5000)
+          signal: AbortSignal.timeout(3000)
         });
 
         if (dlRes.ok) {
@@ -72,7 +72,7 @@ export async function GET(request) {
   }
 
   // ------------------------------------------------------------
-  // SOURCE B: ALTERNATE APIS (NO COOKIE NEEDED)
+  // SOURCE B: ALTERNATE APIS (FALLBACK)
   // ------------------------------------------------------------
   const apiSources = [
     `https://terabox-proxy.vercel.app/api/download?url=${encodeURIComponent(finalShareUrl)}`,
@@ -87,7 +87,7 @@ export async function GET(request) {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
           'Accept': 'application/json'
         },
-        signal: AbortSignal.timeout(6000)
+        signal: AbortSignal.timeout(3000)
       });
 
       if (response.ok) {
@@ -112,30 +112,21 @@ export async function GET(request) {
   }
 
   // ------------------------------------------------------------
-  // SOURCE C: TERABRIDGE FALLBACK (PROXIED & NO COOKIE NEEDED)
+  // SOURCE C: TERABRIDGE FALLBACK (PROXIED - INSTANT RETURN)
+  // Dahil ito ay nagre-redirect sa video file, ibabalik natin ito agad
+  // papunta sa iyong sariling Vercel Proxy nang walang server delays!
   // ------------------------------------------------------------
   try {
-    const terabridgeApiUrl = `https://terabridge.vercel.app/api/download?surl=${cleanId}`;
-    const tbRes = await fetch(terabridgeApiUrl, { signal: AbortSignal.timeout(6000) });
-
-    if (tbRes.ok) {
-      const tbData = await tbRes.json();
-      const rawDirectLink = tbData.download_link || tbData.downloadLink || tbData.direct_link;
-
-      if (rawDirectLink) {
-        return NextResponse.json({
-          ok: true,
-          download_link: `${PROXY_BASE}${encodeURIComponent(rawDirectLink)}`,
-          file_name: tbData.file_name || "TeraBox_Video_Stream.mp4"
-        });
-      }
-    }
+    const terabridgeUrl = `https://terabridge.vercel.app/api/download?surl=${cleanId}`;
+    return NextResponse.json({
+      ok: true,
+      download_link: `${PROXY_BASE}${encodeURIComponent(terabridgeUrl)}`,
+      file_name: "TeraBox_Video_Stream.mp4"
+    });
   } catch (error) {
-    console.log("Source C failed: " + error.message);
+    return NextResponse.json({
+      ok: false,
+      message: 'All public bypass APIs are currently busy. Please try again in a few seconds.'
+    });
   }
-
-  return NextResponse.json({
-    ok: false,
-    message: 'All public bypass APIs are currently busy. Please try again in a few seconds.'
-  });
 }
