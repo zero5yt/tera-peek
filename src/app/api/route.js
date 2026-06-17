@@ -16,7 +16,7 @@ export async function GET(request) {
       finalShareUrl = `https://1024terabox.com/s/${id}`;
     }
 
-    // GAMIT ANG SARILI MONG VERCEL GATEWAY AT TAMA NA ANG BACKTICKS ( ` )
+    // GAMIT ANG BAGO MONG DEPLOYED GATEWAY DOMAIN
     const targetUrl = `https://terabox-gateway-theta.vercel.app/api2?url=${encodeURIComponent(finalShareUrl)}`;
 
     const response = await fetch(targetUrl, {
@@ -34,8 +34,11 @@ export async function GET(request) {
 
     const data = await response.json();
 
-    const file = data.list && data.list[0];
-    const directLink = file ? (file.direct_link || file.dlink || file.download_link) : null;
+    // SMART PARSING: Babasahin nito kung 'files' o 'list' ang ibinalik ng iyong gateway
+    const fileList = data.files || data.list;
+    const file = fileList && fileList[0];
+    
+    const directLink = file ? (file.download_link || file.direct_link || file.dlink) : null;
     const fileName = file ? (file.filename || file.file_name) : "TeraBox_Video.mp4";
 
     if (directLink) {
