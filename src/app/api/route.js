@@ -17,42 +17,20 @@ export async function GET(request) {
 
   const finalShareUrl = `https://www.terabox.com/s/${cleanId}`;
 
-  // ------------------------------------------------------------
-  // SOURCE 1: ANG SARILI MONG "TERABOX-DL" SA RENDER (PRIMARY)
-  // Ito ang pinakamabilis at pinaka-stable dahil sa sarili mong account ito tumatakbo!
-  // Dahil ito ay direct link, ibabalik natin ito nang DIREKTA (no proxy) para iwas 30-sec limit.
-  // ------------------------------------------------------------
-  try {
-    const renderApiUrl = `https://terabox-dl-6bi7.onrender.com/api?url=${encodeURIComponent(finalShareUrl)}`;
-    const renderRes = await fetch(renderApiUrl, { signal: AbortSignal.timeout(6000) });
-
-    if (renderRes.ok) {
-      const renderData = await renderRes.json();
-      
-      // I-extract ang 'download' direct link at metadata mula sa Render API response
-      const rawDirectLink = renderData.download || renderData.url;
-      const fileName = renderData.filename || "TeraBox_Video.mp4";
-
-      if (rawDirectLink) {
-        return NextResponse.json({
-          ok: true,
-          download_link: rawDirectLink, // Direct return para sa maximum speed sa mobile at Chrome!
-          file_name: fileName
-        });
-      }
-    }
-  } catch (e) {
-    console.log("Source 1 (Render API) failed or timed out: " + e.message);
-  }
+  // Awtomatikong gagamitin ang sarili mong Vercel Domain para sa video proxy streaming
+  const host = request.headers.get('host');
+  const protocol = request.headers.get('x-forwarded-proto') || 'https';
+  const PROXY_BASE = `${protocol}://${host}/api/proxy?url=`;
 
   // ------------------------------------------------------------
-  // SOURCE A: TWO-STEP PUBLIC WORKER RESOLVER (FALLBACK)
+  // SOURCE A: TWO-STEP PUBLIC WORKER RESOLVER (PRIMARY FALLBACK)
+  // Binigyan ng 15 SECONDS TIMEOUT para siguradong ma-resolve ang link kahit sa mobile data!
   // ------------------------------------------------------------
   try {
     const infoRes = await fetch(`https://terabox.hnn.workers.dev/api/get-info?shorturl=${cleanId}&pwd=`, {
       method: 'GET',
       headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(3000)
+      signal: AbortSignal.timeout(15000) // Tinaasan sa 15 seconds
     });
 
     if (infoRes.ok) {
@@ -73,7 +51,7 @@ export async function GET(request) {
             timestamp: infoData.timestamp,
             fs_id: fsId
           }),
-          signal: AbortSignal.timeout(3000)
+          signal: AbortSignal.timeout(15000) // Tinaasan sa 15 seconds
         });
 
         if (dlRes.ok) {
@@ -110,7 +88,7 @@ export async function GET(request) {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
           'Accept': 'application/json'
         },
-        signal: AbortSignal.timeout(3000)
+        signal: AbortSignal.timeout(15000) // Tinaasan sa 15 seconds
       });
 
       if (response.ok) {
