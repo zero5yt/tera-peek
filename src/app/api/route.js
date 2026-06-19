@@ -18,13 +18,41 @@ export async function GET(request) {
   const finalShareUrl = `https://www.terabox.com/s/${cleanId}`;
 
   // ------------------------------------------------------------
+  // SOURCE 1: ANG SARILI MONG "TERABOX-DL" SA RENDER (PRIMARY)
+  // Ito ang pinakamabilis at pinaka-stable dahil sa sarili mong account ito tumatakbo!
+  // Dahil ito ay direct link, ibabalik natin ito nang DIREKTA (no proxy) para iwas 30-sec limit.
+  // ------------------------------------------------------------
+  try {
+    const renderApiUrl = `https://terabox-dl-6bi7.onrender.com/api?url=${encodeURIComponent(finalShareUrl)}`;
+    const renderRes = await fetch(renderApiUrl, { signal: AbortSignal.timeout(6000) });
+
+    if (renderRes.ok) {
+      const renderData = await renderRes.json();
+      
+      // I-extract ang 'download' direct link at metadata mula sa Render API response
+      const rawDirectLink = renderData.download || renderData.url;
+      const fileName = renderData.filename || "TeraBox_Video.mp4";
+
+      if (rawDirectLink) {
+        return NextResponse.json({
+          ok: true,
+          download_link: rawDirectLink, // Direct return para sa maximum speed sa mobile at Chrome!
+          file_name: fileName
+        });
+      }
+    }
+  } catch (e) {
+    console.log("Source 1 (Render API) failed or timed out: " + e.message);
+  }
+
+  // ------------------------------------------------------------
   // SOURCE A: TWO-STEP PUBLIC WORKER RESOLVER (FALLBACK)
   // ------------------------------------------------------------
   try {
     const infoRes = await fetch(`https://terabox.hnn.workers.dev/api/get-info?shorturl=${cleanId}&pwd=`, {
       method: 'GET',
       headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(3000) // Maikling timeout para mabilis lumaktaw kapag mabagal
+      signal: AbortSignal.timeout(3000)
     });
 
     if (infoRes.ok) {
@@ -53,7 +81,6 @@ export async function GET(request) {
           const rawDirect = dlData.downloadLink || dlData.download_link || dlData.direct_link || dlData.download;
 
           if (rawDirect) {
-            // Direktang ibalik ang link nang walang proxy para maiwasan ang 30-sec Vercel timeout limit!
             return NextResponse.json({
               ok: true,
               download_link: rawDirect,
@@ -95,7 +122,6 @@ export async function GET(request) {
         const fileName = file ? (file.filename || file.file_name) : "TeraBox_Video.mp4";
 
         if (rawDirectLink) {
-          // Direktang ibalik ang link nang walang proxy para maiwasan ang 30-sec Vercel timeout limit!
           return NextResponse.json({
             ok: true,
             download_link: rawDirectLink,
@@ -110,15 +136,12 @@ export async function GET(request) {
 
   // ------------------------------------------------------------
   // SOURCE C: TERABRIDGE FALLBACK (DIRECT UNPROXIED LINK)
-  // Dahil ito ay nagre-redirect sa video file, ibabalik natin ito nang direkta.
-  // Ang Android player o DownloadManager ay kusang susunod sa redirect (302)
-  // papunta sa pinakamabilis na TeraBox CDN nang walang 30-sec limit!
   // ------------------------------------------------------------
   try {
     const terabridgeUrl = `https://terabridge.vercel.app/api/download?surl=${cleanId}`;
     return NextResponse.json({
       ok: true,
-      download_link: terabridgeUrl, // Direct return, no proxy wrapper!
+      download_link: terabridgeUrl,
       file_name: "TeraBox_Video_Stream.mp4"
     });
   } catch (error) {
